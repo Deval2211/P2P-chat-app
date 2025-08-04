@@ -16,74 +16,97 @@
   <button onclick="sendMessage()">Send</button>
 
   <script>
-    const ws = new WebSocket("ws://65.1.100.167:8765");
+    // Utility: parse ?name=… from URL
+    function getQueryParam(name) {
+      return new URLSearchParams(window.location.search).get(name) || '';
+    }
+
+    const localName = getQueryParam('name');
+    if (!localName) {
+      alert('No name provided. Redirecting back.');
+      window.location.href = 'index.html';
+    }
+
+    const ws      = new WebSocket("ws://65.1.100.167:8765");
     let localId;
-    const peers = {}; // peerId -> { pc: RTCPeerConnection, channel: RTCDataChannel }
+    const peers     = {}; // peerId -> { pc, channel }
+    const peerNames = {}; // peerId -> displayName
 
     const chatDiv = document.getElementById("chat");
     const msgInput = document.getElementById("message");
+
+    ws.onopen = () => {
+      console.log('[WS] connected, waiting for ID…');
+    };
 
     ws.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
 
       if (msg.type === "id") {
-        // Our assigned ID + initial peer list
+        // Server assigned us an ID + peers list with names
         localId = msg.id;
-        console.log("[WS] My ID:", localId);
-        // Kick-off connections to each existing peer
-        msg.peers.forEach(pid => createPeer(pid, true));
+        msg.peers.forEach(p => {
+          peerNames[p.id] = p.name;
+          createPeer(p.id, true);
+        });
+
+        // Now tell server our chosen name
+        ws.send(JSON.stringify({
+          type: "set-name",
+          name: localName
+        }));
 
       } else if (msg.type === "peer-connected") {
-        console.log("[WS] Peer joined:", msg.id);
-        // A newcomer: wait for their offer
+        // A new peer joined: store their name, then init connection
+        peerNames[msg.id] = msg.name;
         createPeer(msg.id, false);
 
-      } else if (msg.type === "signal") {
-        // SDP or ICE candidate relay
+        appendSystem(`${msg.name} joined the chat.`);
+      }
+
+      else if (msg.type === "signal") {
         await handleSignal(msg);
 
       } else if (msg.type === "peer-disconnected") {
+        // Clean up
+        const name = peerNames[msg.id] || msg.id;
         cleanupPeer(msg.id);
+        appendSystem(`${name} left the chat.`);
       }
     };
 
     function createPeer(peerId, isInitiator) {
-      if (peers[peerId]) return;  // only once
-
-      console.log(`[PEER] init ${peerId}, initiator=${isInitiator}`);
+      if (peers[peerId]) return;
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
       });
       peers[peerId] = { pc, channel: null };
 
-      // Relay ICE candidates as soon as we find them
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
           ws.send(JSON.stringify({
             type: "signal",
             from: localId,
-            to: peerId,
+            to:   peerId,
             candidate
           }));
         }
       };
 
-      // Non-initiator: wait for datachannel to be created by remote
       pc.ondatachannel = ({ channel }) => setupChannel(peerId, channel);
 
       if (isInitiator) {
-        // Initiator: open our data channel, then make an SDP offer
         const channel = pc.createDataChannel("chat");
         setupChannel(peerId, channel);
 
         pc.createOffer()
-          .then(offer => pc.setLocalDescription(offer))
+          .then(o => pc.setLocalDescription(o))
           .then(() => {
             ws.send(JSON.stringify({
               type: "signal",
               from: localId,
-              to: peerId,
-              sdp: pc.localDescription
+              to:   peerId,
+              sdp:  pc.localDescription
             }));
           })
           .catch(console.error);
@@ -91,49 +114,42 @@
     }
 
     async function handleSignal({ from, sdp, candidate }) {
-      // Ensure we have a PeerConnection
       if (!peers[from]) createPeer(from, false);
       const { pc } = peers[from];
 
       if (sdp) {
-        // Modern Chrome/Firefox accept the raw RTCSessionDescriptionInit object
         await pc.setRemoteDescription(sdp);
         if (sdp.type === "offer") {
-          // Respond with an answer
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({
             type: "signal",
             from: localId,
-            to: from,
-            sdp: pc.localDescription
+            to:   from,
+            sdp:  pc.localDescription
           }));
         }
       }
-
       if (candidate) {
-        // Modern API lets you pass the plain candidate object
-        try {
-          await pc.addIceCandidate(candidate);
-        } catch (err) {
-          console.warn("ICE candidate error:", err);
-        }
+        await pc.addIceCandidate(candidate).catch(console.warn);
       }
     }
 
     function setupChannel(peerId, channel) {
       peers[peerId].channel = channel;
-
-      channel.onopen = () => console.log(`[DC] open ${peerId}`);
-      channel.onmessage = ({ data }) => appendMsg(peerId, data);
+      channel.onopen    = () => console.log(`[DC] open ${peerId}`);
       channel.onerror   = console.error;
+      channel.onmessage = ({ data }) => {
+        const name = peerNames[peerId] || peerId;
+        appendMsg(name, data);
+      };
     }
 
     function sendMessage() {
       const text = msgInput.value.trim();
       if (!text) return;
+      appendMsg(localName, text);
 
-      appendMsg("You", text);
       Object.values(peers).forEach(({ channel }) => {
         if (channel && channel.readyState === "open") {
           channel.send(text);
@@ -147,14 +163,18 @@
       chatDiv.scrollTop = chatDiv.scrollHeight;
     }
 
+    function appendSystem(text) {
+      chatDiv.innerHTML += `<div style="color: #888;"><i>${text}</i></div>`;
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    }
+
     function cleanupPeer(peerId) {
       const entry = peers[peerId];
       if (!entry) return;
-
       entry.channel?.close();
       entry.pc.close();
       delete peers[peerId];
-      appendMsg("System", `Peer ${peerId} left`);
+      delete peerNames[peerId];
     }
   </script>
 </body>

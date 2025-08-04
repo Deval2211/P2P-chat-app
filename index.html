@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Enter Chat Name</title>
+  <style>
+    body { font-family: sans-serif; display: flex; height: 100vh; justify-content: center; align-items: center; }
+    #form { width: 300px; }
+    input, button { width: 100%; padding: 8px; margin-top: 8px; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="form">
+    <h2>What’s your name?</h2>
+    <input id="nameInput" placeholder="Enter display name" />
+    <button onclick="enterChat()">Join Chat</button>
+  </div>
+
+  <script>
+    function enterChat() {
+      const name = document.getElementById('nameInput').value.trim();
+      if (!name) return alert('Please enter a name.');
+      // Redirect to chat page, carrying name in query string
+      window.location.href = `chatRoom.html?name=${encodeURIComponent(name)}`;
+    }
+  </script>
+</body>
+</html>
