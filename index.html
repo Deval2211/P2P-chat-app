@@ -1,28 +1,97 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Enter Chat Name</title>
-  <style>
-    body { font-family: sans-serif; display: flex; height: 100vh; justify-content: center; align-items: center; }
-    #form { width: 300px; }
-    input, button { width: 100%; padding: 8px; margin-top: 8px; box-sizing: border-box; }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P Chat - Welcome</title>
+  <link rel="stylesheet" href="ui.css">
 </head>
-<body>
-  <div id="form">
-    <h2>What’s your name?</h2>
-    <input id="nameInput" placeholder="Enter display name" />
-    <button onclick="enterName()">Continue</button>
+<body class="index-body">
+  <div class="container index-container">
+    <div class="logo">💬 P2P Chat</div>
+    <div class="subtitle">Connect directly with others</div>
+    
+    <div class="form-group">
+      <input 
+        id="nameInput" 
+        class="input-field" 
+        placeholder="Enter your display name" 
+        maxlength="20"
+        autocomplete="off"
+      />
+    </div>
+    
+    <button id="continueBtn" class="btn" onclick="enterName()">
+      Continue to Chat
+    </button>
+    
+    <div id="error" class="error">Please enter a valid name</div>
+    
+    <div class="features">
+      <div class="feature">
+        <span class="feature-icon">🔒</span>
+        Secure P2P
+      </div>
+      <div class="feature">
+        <span class="feature-icon">⚡</span>
+        Real-time
+      </div>
+      <div class="feature">
+        <span class="feature-icon">🌐</span>
+        No Server
+      </div>
+    </div>
   </div>
 
   <script>
+    const nameInput = document.getElementById('nameInput');
+    const continueBtn = document.getElementById('continueBtn');
+    const error = document.getElementById('error');
+
+    // Enable/disable button based on input
+    nameInput.addEventListener('input', function() {
+      const name = this.value.trim();
+      continueBtn.disabled = !name;
+      error.classList.remove('show');
+    });
+
+    // Handle Enter key
+    nameInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        enterName();
+      }
+    });
+
     function enterName() {
-      const name = document.getElementById('nameInput').value.trim();
-      if (!name) return alert('Please enter a name.');
-      // Go to the lobby page, carrying the chosen name
-      window.location.href = `lobby.html?name=${encodeURIComponent(name)}`;
+      const name = nameInput.value.trim();
+      
+      if (!name) {
+        error.classList.add('show');
+        nameInput.focus();
+        return;
+      }
+      
+      if (name.length < 2) {
+        error.textContent = 'Name must be at least 2 characters';
+        error.classList.add('show');
+        nameInput.focus();
+        return;
+      }
+      
+      // Add loading state
+      continueBtn.textContent = 'Connecting...';
+      continueBtn.disabled = true;
+      
+      // Go to the lobby page
+      setTimeout(() => {
+        window.location.href = `lobby.html?name=${encodeURIComponent(name)}`;
+      }, 500);
     }
+
+    // Focus on input when page loads
+    window.addEventListener('load', () => {
+      nameInput.focus();
+    });
   </script>
 </body>
 </html>

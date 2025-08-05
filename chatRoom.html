@@ -1,82 +1,119 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Multi-Peer P2P Chat</title>
-  <style>
-    body { font-family: sans-serif; margin: 20px; }
-    #roomHeader {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-    #roomCode {
-      font-weight: bold;
-      user-select: all;
-      width: 100px;
-    }
-    #chat {
-      height: 300px;
-      overflow-y: auto;
-      border: 1px solid #ccc;
-      padding: 10px;
-    }
-    input, button {
-      margin-top: 10px;
-      width: 100%;
-      box-sizing: border-box;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P Chat Room</title>
+  <link rel="stylesheet" href="ui.css">
 </head>
-<body>
-  <div id="roomHeader">
-    <div>You: <span id="youName"></span></div>
-    <div>Room Code:</div>
-    <input id="roomCode" readonly />
-    <button id="copyBtn">Copy</button>
-  </div>
+<body class="chat-body">
+  <div class="connection-status" id="connectionStatus">Connecting...</div>
+  
+  <div class="chat-container">
+    <div class="header">
+      <div class="header-left">
+        <div class="chat-logo">💬 P2P Chat</div>
+        <div class="user-info">
+          <div class="user-avatar" id="userAvatar"></div>
+          <span id="userName"></span>
+        </div>
+      </div>
+      
+      <div class="room-info">
+        <span>Room:</span>
+        <span class="room-code" id="roomCode"></span>
+        <button class="copy-btn" id="copyBtn">Copy</button>
+      </div>
+      
+      <a href="lobby.html" class="chat-back-btn">← Back</a>
+    </div>
 
-  <div id="chat"></div>
-  <input id="message" placeholder="Type a message">
-  <button onclick="sendMessage()">Send</button>
+    <div class="chat-area">
+      <div class="messages" id="messages">
+        <div class="system-message">Welcome to the chat! Messages will appear here.</div>
+      </div>
+      
+      <div class="typing-indicator" id="typingIndicator">Someone is typing...</div>
+      
+      <div class="input-area">
+        <textarea 
+          id="messageInput" 
+          class="message-input" 
+          placeholder="Type your message..."
+          rows="1"
+        ></textarea>
+        <button id="sendBtn" class="send-btn" onclick="sendMessage()">
+          Send
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script>
     // Parse URL params
-    const params    = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(window.location.search);
     const localName = params.get('name') || '';
     const localRoom = params.get('room') || 'global';
+    
     if (!localName) {
       alert('Missing name.');
       window.location.href = 'index.html';
     }
 
-    // Show name and room code
-    document.getElementById('youName').innerText    = localName;
-    const roomCodeInput = document.getElementById('roomCode');
-    roomCodeInput.value = localRoom;
+    // Set user info
+    document.getElementById('userName').innerText = localName;
+    document.getElementById('userAvatar').innerText = localName.charAt(0).toUpperCase();
+    document.getElementById('roomCode').innerText = localRoom;
 
-    // Copy button
+    // Copy button functionality
     document.getElementById('copyBtn').onclick = async () => {
       try {
         await navigator.clipboard.writeText(localRoom);
-        document.getElementById('copyBtn').innerText = 'Copied!';
-        setTimeout(() => document.getElementById('copyBtn').innerText = 'Copy', 1000);
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
       } catch (e) {
         console.error('Copy failed', e);
       }
     };
 
-    // WebSocket + WebRTC logic (unchanged except for roomHeader above)
-    const ws        = new WebSocket("ws://15.206.63.64:8765");
+    // Auto-resize textarea
+    const messageInput = document.getElementById('messageInput');
+    messageInput.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+    });
+
+    // Handle Enter key (Shift+Enter for new line)
+    messageInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // WebSocket + WebRTC logic
+    const ws = new WebSocket("ws://15.206.63.64:8765");
     let localId;
-    const peers     = {};
+    const peers = {};
     const peerNames = {};
-    const chatDiv   = document.getElementById("chat");
-    const msgInput  = document.getElementById("message");
+    const messagesDiv = document.getElementById("messages");
+    const connectionStatus = document.getElementById("connectionStatus");
 
     ws.onopen = () => {
+      connectionStatus.textContent = "Connected";
+      connectionStatus.className = "connection-status status-connected";
       ws.send(JSON.stringify({ type: "join", name: localName, room: localRoom }));
+    };
+
+    ws.onclose = () => {
+      connectionStatus.textContent = "Disconnected";
+      connectionStatus.className = "connection-status status-disconnected";
+    };
+
+    ws.onerror = () => {
+      connectionStatus.textContent = "Connection Error";
+      connectionStatus.className = "connection-status status-disconnected";
     };
 
     ws.onmessage = async ({ data }) => {
@@ -92,7 +129,7 @@
       } else if (msg.type === "peer-connected") {
         peerNames[msg.id] = msg.name;
         initPeer(msg.id, false);
-        appendSystem(`${msg.name} joined.`);
+        appendSystem(`${msg.name} joined the chat`);
 
       } else if (msg.type === "signal") {
         await handleSignal(msg);
@@ -100,7 +137,7 @@
       } else if (msg.type === "peer-disconnected") {
         const name = peerNames[msg.id] || msg.id;
         teardownPeer(msg.id);
-        appendSystem(`${name} left.`);
+        appendSystem(`${name} left the chat`);
       }
     };
 
@@ -156,33 +193,62 @@
 
     function setupChannel(peerId, channel) {
       peers[peerId].channel = channel;
-      channel.onopen    = () => console.log(`[DC] open ${peerId}`);
-      channel.onerror   = console.error;
+      channel.onopen = () => console.log(`[DC] open ${peerId}`);
+      channel.onerror = console.error;
       channel.onmessage = ({ data }) => {
         const name = peerNames[peerId] || peerId;
-        appendMsg(name, data);
+        appendMessage(name, data, false);
       };
     }
 
     function sendMessage() {
-      const text = msgInput.value.trim();
+      const text = messageInput.value.trim();
       if (!text) return;
-      appendMsg(localName, text);
+      
+      appendMessage(localName, text, true);
 
       Object.values(peers).forEach(({ channel }) => {
         if (channel?.readyState === "open") channel.send(text);
       });
-      msgInput.value = "";
+      
+      messageInput.value = "";
+      messageInput.style.height = 'auto';
     }
 
-    function appendMsg(user, text) {
-      chatDiv.innerHTML += `<div><b>${user}:</b> ${text}</div>`;
-      chatDiv.scrollTop = chatDiv.scrollHeight;
+    function appendMessage(user, text, isOwn) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${isOwn ? 'own' : ''}`;
+      
+      const avatar = document.createElement('div');
+      avatar.className = 'message-avatar';
+      avatar.textContent = user.charAt(0).toUpperCase();
+      
+      const content = document.createElement('div');
+      content.className = 'message-content';
+      
+      const sender = document.createElement('div');
+      sender.className = 'message-sender';
+      sender.textContent = user;
+      
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.textContent = text;
+      
+      content.appendChild(sender);
+      content.appendChild(bubble);
+      messageDiv.appendChild(avatar);
+      messageDiv.appendChild(content);
+      
+      messagesDiv.appendChild(messageDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
     function appendSystem(text) {
-      chatDiv.innerHTML += `<div style="color:#888;"><i>${text}</i></div>`;
-      chatDiv.scrollTop = chatDiv.scrollHeight;
+      const systemDiv = document.createElement('div');
+      systemDiv.className = 'system-message';
+      systemDiv.textContent = text;
+      messagesDiv.appendChild(systemDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
     function teardownPeer(peerId) {
@@ -193,6 +259,11 @@
       delete peers[peerId];
       delete peerNames[peerId];
     }
+
+    // Focus on input when page loads
+    window.addEventListener('load', () => {
+      messageInput.focus();
+    });
   </script>
 </body>
 </html>
