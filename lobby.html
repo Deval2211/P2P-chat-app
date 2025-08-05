@@ -1,58 +1,132 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Choose a Room</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 40px;
-      max-width: 400px;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      margin: 12px 0;
-      box-sizing: border-box;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P2P Chat - Choose Room</title>
+  <link rel="stylesheet" href="ui.css">
 </head>
-<body>
-  <h2>Welcome!</h2>
-  <div id="welcome"></div>
+<body class="lobby-body">
+  <button class="back-btn" onclick="goBack()">←</button>
+  
+  <div class="container lobby-container">
+    <div class="header">
+      <div class="lobby-logo">💬 P2P Chat</div>
+      <div class="welcome">
+        Welcome, <span class="user-name" id="userName"></span>! 
+        Choose where you'd like to chat.
+      </div>
+    </div>
 
-  <button id="globalBtn">Join Global Chat</button>
-  <button id="joinBtn">Join Private Room</button>
-  <button id="createBtn">Create & Join Private Room</button>
+    <div class="room-options">
+      <div class="room-card global-card" onclick="joinGlobal()">
+        <span class="room-icon">🌍</span>
+        <div class="room-title">Global Chat</div>
+        <div class="room-description">
+          Join the public chat room where everyone can connect and share messages.
+        </div>
+      </div>
+
+      <div class="room-card private-card" onclick="showJoinModal()">
+        <span class="room-icon">🔐</span>
+        <div class="room-title">Join Private Room</div>
+        <div class="room-description">
+          Enter a room code to join a private conversation with specific people.
+        </div>
+      </div>
+
+      <div class="room-card create-card" onclick="createRoom()">
+        <span class="room-icon">✨</span>
+        <div class="room-title">Create Private Room</div>
+        <div class="room-description">
+          Generate a new private room and share the code with friends.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Room Modal -->
+  <div id="joinModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-title">Join Private Room</div>
+      <input 
+        type="text" 
+        id="roomCodeInput" 
+        class="modal-input" 
+        placeholder="Enter room code (e.g., ABC123)"
+        maxlength="10"
+        autocomplete="off"
+      />
+      <div class="modal-buttons">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="joinRoom()">Join Room</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    const params    = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(window.location.search);
     const localName = params.get('name') || '';
+    
     if (!localName) {
       alert('No name provided.');
       window.location.href = 'index.html';
     }
-    document.getElementById('welcome').innerText =
-      `Hello, ${localName}! Choose where to chat.`;
+    
+    document.getElementById('userName').innerText = localName;
 
     function goToChat(room) {
-      const url = `chatRoom.html?name=${encodeURIComponent(localName)}`
-                + `&room=${encodeURIComponent(room)}`;
+      const url = `chatRoom.html?name=${encodeURIComponent(localName)}&room=${encodeURIComponent(room)}`;
       window.location.href = url;
     }
 
-    document.getElementById('globalBtn').onclick = () => goToChat('global');
+    function joinGlobal() {
+      goToChat('global');
+    }
 
-    document.getElementById('joinBtn').onclick = () => {
-      const code = prompt('Enter private room code:').trim();
-      if (code) goToChat(code);
-    };
+    function showJoinModal() {
+      document.getElementById('joinModal').style.display = 'block';
+      document.getElementById('roomCodeInput').focus();
+    }
 
-    document.getElementById('createBtn').onclick = () => {
-      // 6-character alphanumeric code
+    function closeModal() {
+      document.getElementById('joinModal').style.display = 'none';
+      document.getElementById('roomCodeInput').value = '';
+    }
+
+    function joinRoom() {
+      const code = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+      if (code) {
+        closeModal();
+        goToChat(code);
+      } else {
+        document.getElementById('roomCodeInput').focus();
+      }
+    }
+
+    function createRoom() {
+      // Generate 6-character alphanumeric code
       const code = Math.random().toString(36).substr(2, 6).toUpperCase();
       goToChat(code);
-    };
+    }
+
+    function goBack() {
+      window.location.href = 'index.html';
+    }
+
+    // Handle Enter key in modal
+    document.getElementById('roomCodeInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        joinRoom();
+      }
+    });
+
+    // Close modal when clicking outside
+    document.getElementById('joinModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeModal();
+      }
+    });
   </script>
 </body>
 </html>
