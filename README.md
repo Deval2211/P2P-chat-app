@@ -9,38 +9,6 @@ A simple peer-to-peer chat application using WebRTC for direct messaging and Web
 - Global and private chat rooms
 - Modern, responsive UI
 
-## Getting Started
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js (optional, for frontend tooling)
-
-### Installation
-
-1. Clone the repository:
-   ```sh
-   git clone <your-repo-url>
-   cd p2pProject
-   ```
-
-2. Install Python dependencies:
-   ```sh
-   pip install -r requirements.txt
-   ```
-   Or use [pyproject.toml](pyproject.toml) with Poetry:
-   ```sh
-   poetry install
-   ```
-
-### Running the Server
-
-Start the signaling server:
-```sh
-python server.py
-```
-The server listens on `ws://0.0.0.0:8765`.
-
 ### Using the App
 
 1. Open `index.html` in your browser.
