@@ -35,6 +35,11 @@
       
       <div class="typing-indicator" id="typingIndicator">Someone is typing...</div>
       
+      <button id="scrollToBottomBtn" class="scroll-to-bottom-btn" onclick="scrollToBottom()" style="display: none;">
+        <span class="scroll-icon">↓</span>
+        <span class="scroll-text">New Messages</span>
+      </button>
+      
       <div class="input-area">
         <textarea 
           id="messageInput" 
@@ -215,6 +220,15 @@
       messageInput.style.height = 'auto';
     }
 
+    // Smart auto-scroll functionality
+    function isScrolledToBottom(element) {
+      return element.scrollHeight - element.clientHeight <= element.scrollTop + 1;
+    }
+
+    function scrollToBottom() {
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
     function appendMessage(user, text, isOwn) {
       const messageDiv = document.createElement('div');
       messageDiv.className = `message ${isOwn ? 'own' : ''}`;
@@ -240,7 +254,9 @@
       messageDiv.appendChild(content);
       
       messagesDiv.appendChild(messageDiv);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      
+      // Always scroll to bottom for new messages
+      scrollToBottom();
     }
 
     function appendSystem(text) {
@@ -248,7 +264,9 @@
       systemDiv.className = 'system-message';
       systemDiv.textContent = text;
       messagesDiv.appendChild(systemDiv);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      
+      // Always scroll to bottom for system messages
+      scrollToBottom();
     }
 
     function teardownPeer(peerId) {
@@ -259,6 +277,47 @@
       delete peers[peerId];
       delete peerNames[peerId];
     }
+
+    // Enhanced scroll to bottom button functionality
+    const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
+    
+    function updateScrollButton() {
+      const isAtBottom = isScrolledToBottom(messagesDiv);
+      const hasScrollableContent = messagesDiv.scrollHeight > messagesDiv.clientHeight;
+      
+      if (!isAtBottom && hasScrollableContent) {
+        scrollToBottomBtn.style.display = 'flex';
+        scrollToBottomBtn.style.opacity = '1';
+      } else {
+        scrollToBottomBtn.style.opacity = '0';
+        setTimeout(() => {
+          if (scrollToBottomBtn.style.opacity === '0') {
+            scrollToBottomBtn.style.display = 'none';
+          }
+        }, 300);
+      }
+    }
+    
+    messagesDiv.addEventListener('scroll', updateScrollButton);
+    
+    // Also check on window resize and when new messages are added
+    window.addEventListener('resize', updateScrollButton);
+    
+    // Check after a short delay to ensure content is loaded
+    setTimeout(updateScrollButton, 500);
+    
+    // Update scroll button after each message
+    const originalAppendMessage = appendMessage;
+    appendMessage = function(user, text, isOwn) {
+      originalAppendMessage(user, text, isOwn);
+      setTimeout(updateScrollButton, 100);
+    };
+    
+    const originalAppendSystem = appendSystem;
+    appendSystem = function(text) {
+      originalAppendSystem(text);
+      setTimeout(updateScrollButton, 100);
+    };
 
     // Focus on input when page loads
     window.addEventListener('load', () => {

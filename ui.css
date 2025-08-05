@@ -498,13 +498,37 @@ body {
 
 .messages {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: auto; /* Only show scrollbar when needed */
   padding: 10px;
   background: #f8f9fa;
   border-radius: 15px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Firefox scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none; /* IE and Edge */
+  min-height: 100px;
+  max-height: 60vh;
+}
+
+/* WebKit browsers (Chrome, Edge, Safari) */
+.messages::-webkit-scrollbar {
+  display: none;
+}
+.messages::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 5px;
+  transition: background 0.3s ease;
+}
+.messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.messages:hover::-webkit-scrollbar-thumb {
+  background: #764ba2;
+}
+.messages::-webkit-scrollbar-thumb:hover {
+  background: #5a3b7a;
 }
 
 .message {
@@ -675,6 +699,50 @@ body {
   opacity: 1;
 }
 
+.scroll-to-bottom-btn {
+  position: fixed;
+  bottom: 100px;
+  right: 30px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  z-index: 1000;
+  animation: fadeInUp 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.scroll-to-bottom-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(102, 126, 234, 0.5);
+  background: linear-gradient(135deg, #5a6fd8, #6a4190);
+}
+
+.scroll-to-bottom-btn:active {
+  transform: translateY(-1px);
+}
+
+.scroll-icon {
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.scroll-text {
+  font-size: 0.85rem;
+}
+
 /* ===== RESPONSIVE STYLES ===== */
 @media (max-width: 480px) {
   .index-container,
@@ -734,22 +802,20 @@ body {
   .input-area {
     padding: 12px;
   }
-}
-
-/* ===== SCROLLBAR STYLING ===== */
-.messages::-webkit-scrollbar {
-  width: 6px;
-}
-
-.messages::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.messages::-webkit-scrollbar-thumb {
-  background: rgba(102, 126, 234, 0.3);
-  border-radius: 3px;
-}
-
-.messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(102, 126, 234, 0.5);
+  
+  .scroll-to-bottom-btn {
+    bottom: 80px;
+    right: 20px;
+    padding: 10px 15px;
+    font-size: 0.8rem;
+    min-width: 120px;
+  }
+  
+  .scroll-icon {
+    font-size: 1rem;
+  }
+  
+  .scroll-text {
+    font-size: 0.75rem;
+  }
 } 
