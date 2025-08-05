@@ -13,15 +13,15 @@
   <div id="form">
     <h2>What’s your name?</h2>
     <input id="nameInput" placeholder="Enter display name" />
-    <button onclick="enterChat()">Join Chat</button>
+    <button onclick="enterName()">Continue</button>
   </div>
 
   <script>
-    function enterChat() {
+    function enterName() {
       const name = document.getElementById('nameInput').value.trim();
       if (!name) return alert('Please enter a name.');
-      // Redirect to chat page, carrying name in query string
-      window.location.href = `chatRoom.html?name=${encodeURIComponent(name)}`;
+      // Go to the lobby page, carrying the chosen name
+      window.location.href = `lobby.html?name=${encodeURIComponent(name)}`;
     }
   </script>
 </body>

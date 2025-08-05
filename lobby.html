@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Choose a Room</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 40px;
+      max-width: 400px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 12px 0;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h2>Welcome!</h2>
+  <div id="welcome"></div>
+
+  <button id="globalBtn">Join Global Chat</button>
+  <button id="joinBtn">Join Private Room</button>
+  <button id="createBtn">Create & Join Private Room</button>
+
+  <script>
+    const params    = new URLSearchParams(window.location.search);
+    const localName = params.get('name') || '';
+    if (!localName) {
+      alert('No name provided.');
+      window.location.href = 'index.html';
+    }
+    document.getElementById('welcome').innerText =
+      `Hello, ${localName}! Choose where to chat.`;
+
+    function goToChat(room) {
+      const url = `chatRoom.html?name=${encodeURIComponent(localName)}`
+                + `&room=${encodeURIComponent(room)}`;
+      window.location.href = url;
+    }
+
+    document.getElementById('globalBtn').onclick = () => goToChat('global');
+
+    document.getElementById('joinBtn').onclick = () => {
+      const code = prompt('Enter private room code:').trim();
+      if (code) goToChat(code);
+    };
+
+    document.getElementById('createBtn').onclick = () => {
+      // 6-character alphanumeric code
+      const code = Math.random().toString(36).substr(2, 6).toUpperCase();
+      goToChat(code);
+    };
+  </script>
+</body>
+</html>

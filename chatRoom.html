@@ -5,77 +5,106 @@
   <title>Multi-Peer P2P Chat</title>
   <style>
     body { font-family: sans-serif; margin: 20px; }
-    #chat { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; }
-    input, button { margin-top: 10px; width: 100%; box-sizing: border-box; }
+    #roomHeader {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    #roomCode {
+      font-weight: bold;
+      user-select: all;
+      width: 100px;
+    }
+    #chat {
+      height: 300px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+    input, button {
+      margin-top: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body>
-  <h2>Room “main” Chat</h2>
+  <div id="roomHeader">
+    <div>You: <span id="youName"></span></div>
+    <div>Room Code:</div>
+    <input id="roomCode" readonly />
+    <button id="copyBtn">Copy</button>
+  </div>
+
   <div id="chat"></div>
   <input id="message" placeholder="Type a message">
   <button onclick="sendMessage()">Send</button>
 
   <script>
-    // Utility: parse ?name=… from URL
-    function getQueryParam(name) {
-      return new URLSearchParams(window.location.search).get(name) || '';
-    }
-
-    const localName = getQueryParam('name');
+    // Parse URL params
+    const params    = new URLSearchParams(window.location.search);
+    const localName = params.get('name') || '';
+    const localRoom = params.get('room') || 'global';
     if (!localName) {
-      alert('No name provided. Redirecting back.');
+      alert('Missing name.');
       window.location.href = 'index.html';
     }
 
-    const ws      = new WebSocket("ws://65.1.100.167:8765");
-    let localId;
-    const peers     = {}; // peerId -> { pc, channel }
-    const peerNames = {}; // peerId -> displayName
+    // Show name and room code
+    document.getElementById('youName').innerText    = localName;
+    const roomCodeInput = document.getElementById('roomCode');
+    roomCodeInput.value = localRoom;
 
-    const chatDiv = document.getElementById("chat");
-    const msgInput = document.getElementById("message");
+    // Copy button
+    document.getElementById('copyBtn').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(localRoom);
+        document.getElementById('copyBtn').innerText = 'Copied!';
+        setTimeout(() => document.getElementById('copyBtn').innerText = 'Copy', 1000);
+      } catch (e) {
+        console.error('Copy failed', e);
+      }
+    };
+
+    // WebSocket + WebRTC logic (unchanged except for roomHeader above)
+    const ws        = new WebSocket("ws://15.206.63.64:8765");
+    let localId;
+    const peers     = {};
+    const peerNames = {};
+    const chatDiv   = document.getElementById("chat");
+    const msgInput  = document.getElementById("message");
 
     ws.onopen = () => {
-      console.log('[WS] connected, waiting for ID…');
+      ws.send(JSON.stringify({ type: "join", name: localName, room: localRoom }));
     };
 
     ws.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
 
       if (msg.type === "id") {
-        // Server assigned us an ID + peers list with names
         localId = msg.id;
         msg.peers.forEach(p => {
           peerNames[p.id] = p.name;
-          createPeer(p.id, true);
+          initPeer(p.id, true);
         });
 
-        // Now tell server our chosen name
-        ws.send(JSON.stringify({
-          type: "set-name",
-          name: localName
-        }));
-
       } else if (msg.type === "peer-connected") {
-        // A new peer joined: store their name, then init connection
         peerNames[msg.id] = msg.name;
-        createPeer(msg.id, false);
+        initPeer(msg.id, false);
+        appendSystem(`${msg.name} joined.`);
 
-        appendSystem(`${msg.name} joined the chat.`);
-      }
-
-      else if (msg.type === "signal") {
+      } else if (msg.type === "signal") {
         await handleSignal(msg);
 
       } else if (msg.type === "peer-disconnected") {
-        // Clean up
         const name = peerNames[msg.id] || msg.id;
-        cleanupPeer(msg.id);
-        appendSystem(`${name} left the chat.`);
+        teardownPeer(msg.id);
+        appendSystem(`${name} left.`);
       }
     };
 
-    function createPeer(peerId, isInitiator) {
+    function initPeer(peerId, isInitiator) {
       if (peers[peerId]) return;
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -85,10 +114,7 @@
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
           ws.send(JSON.stringify({
-            type: "signal",
-            from: localId,
-            to:   peerId,
-            candidate
+            type: "signal", from: localId, to: peerId, candidate
           }));
         }
       };
@@ -98,15 +124,11 @@
       if (isInitiator) {
         const channel = pc.createDataChannel("chat");
         setupChannel(peerId, channel);
-
         pc.createOffer()
           .then(o => pc.setLocalDescription(o))
           .then(() => {
             ws.send(JSON.stringify({
-              type: "signal",
-              from: localId,
-              to:   peerId,
-              sdp:  pc.localDescription
+              type: "signal", from: localId, to: peerId, sdp: pc.localDescription
             }));
           })
           .catch(console.error);
@@ -114,7 +136,7 @@
     }
 
     async function handleSignal({ from, sdp, candidate }) {
-      if (!peers[from]) createPeer(from, false);
+      if (!peers[from]) initPeer(from, false);
       const { pc } = peers[from];
 
       if (sdp) {
@@ -123,10 +145,7 @@
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({
-            type: "signal",
-            from: localId,
-            to:   from,
-            sdp:  pc.localDescription
+            type: "signal", from: localId, to: from, sdp: pc.localDescription
           }));
         }
       }
@@ -151,9 +170,7 @@
       appendMsg(localName, text);
 
       Object.values(peers).forEach(({ channel }) => {
-        if (channel && channel.readyState === "open") {
-          channel.send(text);
-        }
+        if (channel?.readyState === "open") channel.send(text);
       });
       msgInput.value = "";
     }
@@ -164,11 +181,11 @@
     }
 
     function appendSystem(text) {
-      chatDiv.innerHTML += `<div style="color: #888;"><i>${text}</i></div>`;
+      chatDiv.innerHTML += `<div style="color:#888;"><i>${text}</i></div>`;
       chatDiv.scrollTop = chatDiv.scrollHeight;
     }
 
-    function cleanupPeer(peerId) {
+    function teardownPeer(peerId) {
       const entry = peers[peerId];
       if (!entry) return;
       entry.channel?.close();
