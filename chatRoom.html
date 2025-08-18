@@ -97,32 +97,37 @@
       }
     });
 
-    // WebSocket + WebRTC logic
-    const ws = new WebSocket("ws://15.206.63.64:8765");
+    // --- WebSocket + WebRTC logic ---
+    const ws = new WebSocket("ws://13.234.42.145:8765");
     let localId;
     const peers = {};
     const peerNames = {};
+    const candidateQueues = {};
     const messagesDiv = document.getElementById("messages");
     const connectionStatus = document.getElementById("connectionStatus");
 
     ws.onopen = () => {
       connectionStatus.textContent = "Connected";
       connectionStatus.className = "connection-status status-connected";
+      console.log("[WS] Connected");
       ws.send(JSON.stringify({ type: "join", name: localName, room: localRoom }));
     };
 
     ws.onclose = () => {
       connectionStatus.textContent = "Disconnected";
       connectionStatus.className = "connection-status status-disconnected";
+      console.log("[WS] Disconnected");
     };
 
-    ws.onerror = () => {
+    ws.onerror = (err) => {
       connectionStatus.textContent = "Connection Error";
       connectionStatus.className = "connection-status status-disconnected";
+      console.error("[WS] Error", err);
     };
 
     ws.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
+      console.log("[WS] Message", msg);
 
       if (msg.type === "id") {
         localId = msg.id;
@@ -146,20 +151,40 @@
       }
     };
 
+    function queueCandidate(from, cand) {
+      (candidateQueues[from] ||= []).push(cand);
+    }
+    async function flushQueued(from) {
+      const q = candidateQueues[from] || [];
+      while (q.length) {
+        const c = q.shift();
+        try { await peers[from].pc.addIceCandidate(c); }
+        catch (e) { console.warn('[ICE] queued add failed', e); }
+      }
+    }
+
     function initPeer(peerId, isInitiator) {
       if (peers[peerId]) return;
+
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
       });
+
       peers[peerId] = { pc, channel: null };
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
+          console.log("[ICE] local candidate ->", peerId, candidate);
           ws.send(JSON.stringify({
-            type: "signal", from: localId, to: peerId, candidate
+            type: "signal", from: localId, to: peerId, candidate: candidate.toJSON()
           }));
         }
       };
+
+      pc.oniceconnectionstatechange = () =>
+        console.log(`[ICE] ${peerId} ->`, pc.iceConnectionState);
+      pc.onconnectionstatechange = () =>
+        console.log(`[PC] ${peerId} ->`, pc.connectionState);
 
       pc.ondatachannel = ({ channel }) => setupChannel(peerId, channel);
 
@@ -169,6 +194,7 @@
         pc.createOffer()
           .then(o => pc.setLocalDescription(o))
           .then(() => {
+            console.log("[SDP] sending offer ->", peerId);
             ws.send(JSON.stringify({
               type: "signal", from: localId, to: peerId, sdp: pc.localDescription
             }));
@@ -182,24 +208,42 @@
       const { pc } = peers[from];
 
       if (sdp) {
-        await pc.setRemoteDescription(sdp);
-        if (sdp.type === "offer") {
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          ws.send(JSON.stringify({
-            type: "signal", from: localId, to: from, sdp: pc.localDescription
-          }));
+        try {
+          await pc.setRemoteDescription(sdp);
+          console.log("[SDP] setRemoteDescription from", from, sdp.type);
+          if (sdp.type === "offer") {
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({
+              type: "signal", from: localId, to: from, sdp: pc.localDescription
+            }));
+          }
+          await flushQueued(from);
+        } catch (e) {
+          console.error("[SDP] error", e);
         }
       }
       if (candidate) {
-        await pc.addIceCandidate(candidate).catch(console.warn);
+        if (pc.remoteDescription) {
+          try {
+            await pc.addIceCandidate(candidate);
+            console.log("[ICE] addCandidate from", from);
+          } catch (e) { console.warn("[ICE] error", e); }
+        } else {
+          queueCandidate(from, candidate);
+          console.log("[ICE] queued candidate from", from);
+        }
       }
     }
 
     function setupChannel(peerId, channel) {
       peers[peerId].channel = channel;
-      channel.onopen = () => console.log(`[DC] open ${peerId}`);
-      channel.onerror = console.error;
+      channel.onopen = () => {
+        console.log(`[DC] open ${peerId}`);
+        appendSystem(`${peerNames[peerId] || peerId} is online`);
+      };
+      channel.onclose = () => console.log(`[DC] close ${peerId}`);
+      channel.onerror = (e) => console.error(`[DC] error ${peerId}`, e);
       channel.onmessage = ({ data }) => {
         const name = peerNames[peerId] || peerId;
         appendMessage(name, data, false);
@@ -209,22 +253,19 @@
     function sendMessage() {
       const text = messageInput.value.trim();
       if (!text) return;
-      
       appendMessage(localName, text, true);
 
       Object.values(peers).forEach(({ channel }) => {
         if (channel?.readyState === "open") channel.send(text);
       });
-      
+
       messageInput.value = "";
       messageInput.style.height = 'auto';
     }
 
-    // Smart auto-scroll functionality
     function isScrolledToBottom(element) {
       return element.scrollHeight - element.clientHeight <= element.scrollTop + 1;
     }
-
     function scrollToBottom() {
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
@@ -232,30 +273,22 @@
     function appendMessage(user, text, isOwn) {
       const messageDiv = document.createElement('div');
       messageDiv.className = `message ${isOwn ? 'own' : ''}`;
-      
       const avatar = document.createElement('div');
       avatar.className = 'message-avatar';
       avatar.textContent = user.charAt(0).toUpperCase();
-      
       const content = document.createElement('div');
       content.className = 'message-content';
-      
       const sender = document.createElement('div');
       sender.className = 'message-sender';
       sender.textContent = user;
-      
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
       bubble.textContent = text;
-      
       content.appendChild(sender);
       content.appendChild(bubble);
       messageDiv.appendChild(avatar);
       messageDiv.appendChild(content);
-      
       messagesDiv.appendChild(messageDiv);
-      
-      // Always scroll to bottom for new messages
       scrollToBottom();
     }
 
@@ -264,8 +297,6 @@
       systemDiv.className = 'system-message';
       systemDiv.textContent = text;
       messagesDiv.appendChild(systemDiv);
-      
-      // Always scroll to bottom for system messages
       scrollToBottom();
     }
 
@@ -278,13 +309,10 @@
       delete peerNames[peerId];
     }
 
-    // Enhanced scroll to bottom button functionality
     const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
-    
     function updateScrollButton() {
       const isAtBottom = isScrolledToBottom(messagesDiv);
       const hasScrollableContent = messagesDiv.scrollHeight > messagesDiv.clientHeight;
-      
       if (!isAtBottom && hasScrollableContent) {
         scrollToBottomBtn.style.display = 'flex';
         scrollToBottomBtn.style.opacity = '1';
@@ -297,32 +325,11 @@
         }, 300);
       }
     }
-    
     messagesDiv.addEventListener('scroll', updateScrollButton);
-    
-    // Also check on window resize and when new messages are added
     window.addEventListener('resize', updateScrollButton);
-    
-    // Check after a short delay to ensure content is loaded
     setTimeout(updateScrollButton, 500);
-    
-    // Update scroll button after each message
-    const originalAppendMessage = appendMessage;
-    appendMessage = function(user, text, isOwn) {
-      originalAppendMessage(user, text, isOwn);
-      setTimeout(updateScrollButton, 100);
-    };
-    
-    const originalAppendSystem = appendSystem;
-    appendSystem = function(text) {
-      originalAppendSystem(text);
-      setTimeout(updateScrollButton, 100);
-    };
 
-    // Focus on input when page loads
-    window.addEventListener('load', () => {
-      messageInput.focus();
-    });
+    window.addEventListener('load', () => messageInput.focus());
   </script>
 </body>
 </html>
