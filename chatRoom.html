@@ -24,13 +24,13 @@
         <span class="room-code" id="roomCode"></span>
         <button class="copy-btn" id="copyBtn">Copy</button>
       </div>
-      
-      <a href="lobby.html" class="chat-back-btn">← Back</a>
+
+        <a id="backBtn" class="chat-back-btn">← Back</a>      
     </div>
 
     <div class="chat-area">
       <div class="messages" id="messages">
-        <div class="system-message">Welcome to the chat! Messages will appear here.</div>
+        <div class="system-message" id="welcomeMsg">Welcome to the chat! Messages will appear here.</div>
       </div>
       
       <div class="typing-indicator" id="typingIndicator">Someone is typing...</div>
@@ -59,6 +59,7 @@
     const params = new URLSearchParams(window.location.search);
     const localName = params.get('name') || '';
     const localRoom = params.get('room') || 'global';
+    document.getElementById('backBtn').href = `lobby.html?name=${encodeURIComponent(localName)}`;
     
     if (!localName) {
       alert('Missing name.');
@@ -81,6 +82,21 @@
         console.error('Copy failed', e);
       }
     };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const welcomeMsg = document.getElementById('welcomeMsg');
+      if (welcomeMsg) {
+        setTimeout(() => {
+          welcomeMsg.style.opacity = '0';
+          welcomeMsg.style.transition = 'opacity 0.4s';
+          setTimeout(() => {
+            if (welcomeMsg.parentNode) {
+              welcomeMsg.parentNode.removeChild(welcomeMsg);
+            }
+          }, 400);
+        }, 4000);
+      }
+    });
 
     // Auto-resize textarea
     const messageInput = document.getElementById('messageInput');
@@ -298,6 +314,16 @@
       systemDiv.textContent = text;
       messagesDiv.appendChild(systemDiv);
       scrollToBottom();
+      // Remove system message after 4 seconds
+      setTimeout(() => {
+        systemDiv.style.opacity = '0';
+        systemDiv.style.transition = 'opacity 0.4s';
+        setTimeout(() => {
+          if (systemDiv.parentNode) {
+            systemDiv.parentNode.removeChild(systemDiv);
+          }
+        }, 400);
+      }, 4000);
     }
 
     function teardownPeer(peerId) {
